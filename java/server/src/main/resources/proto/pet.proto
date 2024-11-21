@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package com.pet.proto;
+
+// Message to represent a Pet
+message Pet {
+  string id = 1; // Unique identifier for the pet
+  string name = 2; // Name of the pet
+  string gender = 3; // Gender of the pet (e.g., "Male", "Female")
+  int32 age = 4; // Age of the pet in years
+  string breed = 5; // Breed of the pet
+  bytes picture = 6; // Picture of the pet in binary format (e.g., image file)
+}
+
+// Request message for registering a new pet
+message RegisterPetRequest {
+  Pet pet = 1; // Pet information to be registered
+}
+
+// Response message for registering a pet
+message RegisterPetResponse {
+  string message = 1; // Confirmation message (e.g., "Pet registered successfully")
+  Pet pet = 2; // The registered pet information
+}
+
+// Request message for searching pets
+message SearchPetsRequest {
+  string name = 1; // Optional: Name of the pet to search
+  string gender = 2; // Optional: Gender of the pet to search
+  int32 age = 3; // Optional: Age of the pet to search
+  string breed = 4; // Optional: Breed of the pet to search
+}
+
+// Response message for searching pets
+message SearchPetsResponse {
+  repeated Pet pets = 1; // List of matching pets
+  string message = 2; // Message indicating the result of the search
+}
+
+// Service definition for Pet operations
+service PetService {
+  rpc RegisterPet(RegisterPetRequest) returns (RegisterPetResponse);
+  rpc SearchPets(SearchPetsRequest) returns (SearchPetsResponse);
+}

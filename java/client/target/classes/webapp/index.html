@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pet Management</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    input, button {
+      margin: 5px;
+      padding: 10px;
+      width: 200px;
+    }
+    .container {
+      margin-bottom: 30px;
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    button {
+      cursor: pointer;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    #searchResults p {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+
+
+<body>
+<h1>Pet Management System</h1>
+
+<!-- Register Pet Form -->
+<div class="container">
+  <h2>Register a Pet</h2>
+  <form id="registerForm" enctype="multipart/form-data">
+    <input type="text" id="petId" placeholder="Pet ID" required />
+    <input type="text" id="petName" placeholder="Pet Name" required />
+    <input type="text" id="petBreed" placeholder="Pet Breed" required />
+    <input type="number" id="petAge" placeholder="Pet Age" min="0" required />
+    <input type="text" id="petGender" placeholder="Pet Gender (Male/Female)" required />
+    <input type="file" id="petPicture" accept="image/*" /><br><br>
+    <button type="submit">Register Pet</button>
+  </form>
+  <p id="registerResponse"></p>
+</div>
+
+<!-- Search Pets Form -->
+<div class="container">
+  <h2>Search Pets</h2>
+  <form id="searchForm">
+    <input type="text" id="searchName" placeholder="Search by Name" />
+    <input type="text" id="searchBreed" placeholder="Search by Breed" />
+    <input type="text" id="searchGender" placeholder="Search by Gender" />
+    <input type="number" id="searchAge" placeholder="Search by Age" min="0" />
+    <button type="submit">Search Pets</button>
+  </form>
+  <div id="searchResults"></div>
+</div>
+
+<script>
+  const apiBaseUrl = "http://localhost:8080";
+
+  // Register Pet Handler
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault(); // Prevent page reload
+
+    const formData = new FormData();
+    formData.append("id", document.getElementById("petId").value);
+    formData.append("name", document.getElementById("petName").value);
+    formData.append("breed", document.getElementById("petBreed").value);
+    formData.append("age", document.getElementById("petAge").value);
+    formData.append("gender", document.getElementById("petGender").value);
+
+    // Attach picture if provided
+    const pictureFile = document.getElementById("petPicture").files[0];
+    if (pictureFile) {
+      formData.append("picture", pictureFile);
+    }
+
+    try {
+      // Send POST request to register the pet
+      const response = await fetch(`${apiBaseUrl}/register`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      document.getElementById("registerResponse").innerText =
+              result.message || result.error;
+    } catch (error) {
+      document.getElementById("registerResponse").innerText =
+              "Error registering pet.";
+    }
+  });
+
+  // Search Pets Handler
+  document.getElementById("searchForm").addEventListener("submit", async (e) => {
+    e.preventDefault(); // Prevent page reload
+
+    const params = new URLSearchParams({
+      name: document.getElementById("searchName").value,
+      breed: document.getElementById("searchBreed").value,
+      gender: document.getElementById("searchGender").value,
+      age: document.getElementById("searchAge").value || 0,
+    });
+
+    try {
+      // Send GET request to search for pets
+      const response = await fetch(`${apiBaseUrl}/search?${params.toString()}`);
+      const result = await response.json();
+
+      const resultsContainer = document.getElementById("searchResults");
+      resultsContainer.innerHTML = ""; // Clear previous results
+
+      if (result.pets && result.pets.length > 0) {
+        result.pets.forEach((pet) => {
+          const petInfo = document.createElement("div");
+
+          // Display pet details
+          const details = document.createElement("p");
+          details.innerText = `ID: ${pet.id}, Name: ${pet.name}, Breed: ${pet.breed}, Age: ${pet.age}, Gender: ${pet.gender}`;
+          petInfo.appendChild(details);
+
+          // Display pet picture if available
+          if (pet.picture) {
+            const img = document.createElement("img");
+            img.src = `data:image/jpeg;base64,${pet.picture}`;
+            img.alt = `${pet.name}'s Picture`;
+            img.style.maxWidth = "200px";
+            petInfo.appendChild(img);
+          }
+
+          resultsContainer.appendChild(petInfo);
+        });
+      } else {
+        resultsContainer.innerText = result.message || "No pets found.";
+      }
+    } catch (error) {
+      console.log(error)
+      document.getElementById("searchResults").innerText =
+              "Error fetching pets.";
+    }
+  });
+</script>
+</body>
+
+</html>

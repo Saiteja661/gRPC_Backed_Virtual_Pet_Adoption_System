@@ -1,0 +1,179 @@
+package com.pet;
+
+import com.pet.proto.PetOuterClass.Pet;
+import com.pet.proto.PetOuterClass.RegisterPetRequest;
+import com.pet.proto.PetOuterClass.RegisterPetResponse;
+import com.pet.proto.PetOuterClass.SearchPetsRequest;
+import com.pet.proto.PetOuterClass.SearchPetsResponse;
+import com.pet.proto.PetServiceGrpc;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.StatusRuntimeException;
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpExchange;
+import com.google.gson.Gson;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.concurrent.Executors;
+
+public class PetClient {
+    private static final String HOST = "localhost";
+    private static final int PORT = 50051; // gRPC server port
+    private static final int HTTP_PORT = 8081; // HTTP Server Port
+
+    private final PetServiceGrpc.PetServiceBlockingStub stub;
+    private final static Gson gson = new Gson();
+
+    public PetClient() {
+        // Create a gRPC channel and stub
+        ManagedChannel channel = ManagedChannelBuilder.forAddress(HOST, PORT)
+                .usePlaintext() // Use plaintext for simplicity
+                .build();
+        this.stub = PetServiceGrpc.newBlockingStub(channel);
+    }
+
+    public String registerPet(Pet pet) {
+        RegisterPetRequest request = RegisterPetRequest.newBuilder().setPet(pet).build();
+        RegisterPetResponse response;
+        try {
+            response = stub.registerPet(request);
+            return response.getMessage();
+        } catch (StatusRuntimeException e) {
+            return "Failed to register pet: " + e.getStatus().getDescription();
+        }
+    }
+
+    public SearchPetsResponse searchPets(String name, String gender, Integer age, String breed) {
+        SearchPetsRequest request = SearchPetsRequest.newBuilder()
+                .setName(name)
+                .setGender(gender)
+                .setAge(age != null ? age : 0)
+                .setBreed(breed)
+                .build();
+        return stub.searchPets(request);
+    }
+
+    private void startHttpServer() throws IOException {
+        HttpServer server = HttpServer.create(new java.net.InetSocketAddress(HTTP_PORT), 0);
+        server.createContext("/register", new RegisterPetHandler());
+        server.createContext("/search", new SearchPetsHandler());
+        server.createContext("/", new HttpHandler() {
+            @Override
+            public void handle(HttpExchange exchange) throws IOException {
+                String response = serveIndexHtml();
+                exchange.sendResponseHeaders(200, response.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            }
+        });
+        server.setExecutor(Executors.newCachedThreadPool());
+        server.start();
+        System.out.println("HTTP server started on port " + HTTP_PORT);
+    }
+
+    private String serveIndexHtml() throws IOException {
+        Path path = Paths.get("src/main/resources/index.html");
+        return Files.readString(path);
+    }
+
+    // Handler for registering a pet
+    private class RegisterPetHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                // Read request body
+                InputStream inputStream = exchange.getRequestBody();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                StringBuilder requestBody = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    requestBody.append(line);
+                }
+
+                // Parse the request body to create a Pet object
+                Pet pet = gson.fromJson(requestBody.toString(), Pet.class);
+                String message = registerPet(pet);
+                String response = gson.toJson(message);
+
+                exchange.sendResponseHeaders(200, response.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } else {
+                String response = "Method Not Allowed";
+                exchange.sendResponseHeaders(405, response.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            }
+        }
+    }
+
+    // Handler for searching pets
+    private class SearchPetsHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                // Parse query parameters
+                String query = exchange.getRequestURI().getQuery();
+                String name = null, gender = null, breed = null;
+                Integer age = null;
+
+                // Split the query into key-value pairs
+                if (query != null) {
+                    String[] params = query.split("&");
+                    for (String param : params) {
+                        String[] pair = param.split("=");
+                        if (pair.length == 2) {
+                            String key = pair[0];
+                            String value = java.net.URLDecoder.decode(pair[1], StandardCharsets.UTF_8);
+                            switch (key) {
+                                case "name":
+                                    name = value;
+                                    break;
+                                case "gender":
+                                    gender = value;
+                                    break;
+                                case "age":
+                                    age = Integer.valueOf(value);
+                                    break;
+                                case "breed":
+                                    breed = value;
+                                    break;
+                            }
+                        }
+                    }
+                }
+
+                // Search for pets
+                SearchPetsResponse response = searchPets(name, gender, age, breed);
+                String jsonResponse = gson.toJson(response.getPetsList());
+
+                exchange.sendResponseHeaders(200, jsonResponse.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(jsonResponse.getBytes());
+                os.close();
+            } else {
+                String response = "Method Not Allowed";
+                exchange.sendResponseHeaders(405, response.length());
+                OutputStream os = exchange.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        PetClient client = new PetClient();
+        client.startHttpServer(); // Start the HTTP server
+    }
+}
